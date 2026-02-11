@@ -7,7 +7,9 @@
 
 
 ## installation and setup:
-- step0: [download and install the mod.](https://github.com/KopterBuzz/NOFFB/releases/latest) 
+- step0: Installation is possible via [NOMM - Nuclear Option Mod Manager](https://github.com/Combat787/NuclearOptionModManager/) - [DOWNLOAD](https://github.com/Combat787/NuclearOptionModManager/releases/latest)
+
+[download and install the mod.](https://github.com/KopterBuzz/NOFFB/releases/latest) 
 unpack the zipfile content into Plugins, or create a NOFFB folder inside Plugins and unpack everything there
 also install [BepInEx Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases/download/v18.4.1/BepInEx.ConfigurationManager_BepInEx5_v18.4.1.zip) if not already installed
 
