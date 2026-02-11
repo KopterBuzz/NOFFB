@@ -11,6 +11,7 @@
 
 [download and install the mod.](https://github.com/KopterBuzz/NOFFB/releases/latest) 
 unpack the zipfile content into Plugins, or create a NOFFB folder inside Plugins and unpack everything there
+
 also install [BepInEx Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases/download/v18.4.1/BepInEx.ConfigurationManager_BepInEx5_v18.4.1.zip) if not already installed
 
 - step 1: run the NOFFBController.exe
