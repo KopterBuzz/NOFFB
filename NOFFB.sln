@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36811.4
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NOFFB", "NOFFB\NOFFB.csproj", "{EA4A59FD-5B22-47FA-AB1D-253721617C27}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NOFFBController", "NOFFBController\NOFFBController.csproj", "{3AE958D2-9F41-4EF9-AF7B-703C1E56D55F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EA4A59FD-5B22-47FA-AB1D-253721617C27}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA4A59FD-5B22-47FA-AB1D-253721617C27}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA4A59FD-5B22-47FA-AB1D-253721617C27}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA4A59FD-5B22-47FA-AB1D-253721617C27}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3AE958D2-9F41-4EF9-AF7B-703C1E56D55F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3AE958D2-9F41-4EF9-AF7B-703C1E56D55F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3AE958D2-9F41-4EF9-AF7B-703C1E56D55F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3AE958D2-9F41-4EF9-AF7B-703C1E56D55F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3FC6D586-81FB-4E7F-AEE1-AB7DC77A2C25}
+	EndGlobalSection
+EndGlobal
