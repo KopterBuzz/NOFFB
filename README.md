@@ -19,22 +19,26 @@ this is a workaround because the way I was doing FFB effects was crashing the ga
 as seen on the screenshot, it will list FFB-capable devices. enter the index number of the one you want to the FFB effects to go to.
 
 NOFFBController.exe talks to the NOFFB plugin via a local UDP network socket, that's how it receives instructions from the game to generate forces on your peripherals.
+
 When you run it the first time Windows Defender may block the EXE because it is unsigned. Just let it run anyway.
 It will also ask if you want it to be able to talk on private network. Also allow this. It doesn't go out to internet, only localhost:5001.
 
 NOFFBController.exe may not launch unless you have Microsoft Desktop Runtime 10 installed on your PC, sorry about that.
 
 !!NOFFBController.exe may force disable autocenter on your flight stick!!
+
 i will come up with something to handle this better
 
 - step 2: in configuration manager you will see relevant settings
 
 FBW_Debugui shows/hides  the debug visualizer.
-the green dot  is your stick position, the cyan dot is the direction and magnitude of the FBW pushback force
+
+In the visualizer, the green dot  is your stick position, the cyan dot is the direction and magnitude of the FBW pushback force
 
 FFB_Gain 0.0 - 1.0 is a master gain multiplier for all FFB forces,
 
 FFB_xAxisInvert - if the forces appear to be inverted on the ROLL axis, enable this
+
 FFB_yAxisInvert - if the forces appear to be inverted on the PITCH axis, enable this
 
 FFB_FBWPushBack_Factor - governs how quickly the pushback force starts to ramp up.
