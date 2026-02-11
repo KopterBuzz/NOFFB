@@ -36,13 +36,13 @@ FBW_Debugui shows/hides  the debug visualizer.
 
 In the visualizer, the green dot  is your stick position, the cyan dot is the direction and magnitude of the FBW pushback force
 
-FFB_Gain 0.0 - 1.0 is a master gain multiplier for all FFB forces,
+FFB_Gain \[0.0 - 1.0\] - is a master gain multiplier for all FFB forces,
 
 FFB_xAxisInvert - if the forces appear to be inverted on the ROLL axis, enable this
 
 FFB_yAxisInvert - if the forces appear to be inverted on the PITCH axis, enable this
 
-FFB_FBWPushBack_Factor - governs how quickly the pushback force starts to ramp up.
+FFB_FBWPushBack_Factor \[0.0 - 1.0\] - governs how quickly the pushback force starts to ramp up.
 
 How FBW Pushback currently works: if the player stick input is greater than what the input filter enforced for the aircraft, it will start to generate an appropriate counter-force on the respective axis.
 
