@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Net.Http.Headers;
 using NOFFBController.Messages;
+using NOFFBMessaging;
 using SharpDX;
 using SharpDX.DirectInput;
 
@@ -18,7 +19,7 @@ namespace NOFFBController
         private int xAxisOffset = 0, yAxisOffset = 0;
         private int nextOffset = 0;
         Effect ffbConstantEffect;
-        Effect damperEffect;
+        Effect ffbDamperEffect;
         Effect periodicEffect;
         Effect suspensionEffect;
         Effect steeringForceEffect;
@@ -30,6 +31,103 @@ namespace NOFFBController
         public ForceFeedbackController()
         {
             _directInput = new DirectInput();
+        }
+
+        public bool Initialize2(DeviceInstance selectedDevice)
+        {
+            if (ffbConstantEffect != null)
+            {
+                ffbConstantEffect.Stop();
+                ffbConstantEffect.Dispose();
+                ffbConstantEffect = null;
+
+            }
+
+            if (ffbDamperEffect != null)
+            {
+                ffbDamperEffect.Stop();
+                ffbDamperEffect.Dispose();
+                ffbDamperEffect = null;
+
+            }
+            try
+            {
+                _joystick = new Joystick(_directInput, selectedDevice.InstanceGuid);
+                Console.WriteLine($"\nInitializing: {selectedDevice.ProductName}");
+
+                // CRITICAL: Set cooperative level BEFORE acquiring
+                // Force feedback requires exclusive access
+                try
+                {
+                    // Get console window handle
+                    IntPtr consoleHandle = GetConsoleWindow();
+                    _joystick.SetCooperativeLevel(consoleHandle,
+                        CooperativeLevel.Exclusive | CooperativeLevel.Background);
+                    Console.WriteLine("Set exclusive cooperative level");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: Could not set cooperative level: {ex.Message}");
+                    // Try with foreground instead
+                    try
+                    {
+                        IntPtr consoleHandle = GetConsoleWindow();
+                        _joystick.SetCooperativeLevel(consoleHandle,
+                            CooperativeLevel.Exclusive | CooperativeLevel.Foreground);
+                        Console.WriteLine("Set exclusive foreground cooperative level");
+                    }
+                    catch
+                    {
+                        Console.WriteLine("Warning: Using default cooperative level");
+                    }
+                }
+
+                // Set properties
+                _joystick.Properties.BufferSize = 8192;
+                //_joystick.Properties.AutoCenter = false;
+
+                // Acquire the device
+                _joystick.Acquire();
+                Console.WriteLine("Device acquired successfully");
+
+
+
+                var deviceObjs = _joystick.GetObjects().ToList().Select(o => o.ObjectId).ToList();
+                List<int> intList = deviceObjs
+                    .FindAll(o => o.Flags.HasFlag(DeviceObjectTypeFlags.ForceFeedbackActuator))
+                    .Select(o => (int)o).ToList();
+
+                foreach (int i in intList)
+                {
+                    Console.WriteLine($"Found FFB actuator: {i}");
+                    if (nextOffset == 0)
+                        xAxisOffset = i;
+                    else
+                        yAxisOffset = i;
+                    nextOffset++;
+                }
+
+                foreach (DeviceObjectInstance doi in _joystick.GetObjects())
+                {
+                    if (doi.ObjectId.Flags.HasFlag(DeviceObjectTypeFlags.ForceFeedbackActuator))
+                    {
+                        ffbAxes.Add((int)doi.ObjectId);
+                        Console.WriteLine($"Found FFB Axis: {doi.Name}, ObjectId: {doi.ObjectId}");
+                    }
+                }
+
+                Console.WriteLine($"x axis offset: {xAxisOffset}, y axis offser: {yAxisOffset}");
+
+                Console.WriteLine("Device initialized successfully!\n");
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error initializing device {selectedDevice.ProductName}: {ex.Message}");
+                return false;
+            }
+            return true;
         }
 
         public bool Initialize()
@@ -145,7 +243,7 @@ namespace NOFFBController
 
                 // Set properties
                 _joystick.Properties.BufferSize = 8192;
-                _joystick.Properties.AutoCenter = false;
+                //_joystick.Properties.AutoCenter = false;
                 
                 // Acquire the device
                 _joystick.Acquire();
@@ -207,47 +305,6 @@ namespace NOFFBController
             _isRunning = false;
             _pollingTask?.Wait(1000);
         }
-        /*
-        private async Task PollLoop(int intervalMs)
-        {
-            while (_isRunning && _joystick != null)
-            {
-                try
-                {
-                    _joystick.Poll();
-                    var state = _joystick.GetCurrentState();
-
-                    var message = new ControllerInputMessage
-                    {
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                    };
-
-                    // Read axes
-                    message.Axes["X"] = state.X;
-                    message.Axes["Y"] = state.Y;
-                    message.Axes["Z"] = state.Z;
-                    message.Axes["RotationX"] = state.RotationX;
-                    message.Axes["RotationY"] = state.RotationY;
-                    message.Axes["RotationZ"] = state.RotationZ;
-
-                    // Read buttons
-                    for (int i = 0; i < state.Buttons.Length; i++)
-                    {
-                        message.Buttons[i] = state.Buttons[i];
-                    }
-
-                    OnInputUpdate?.Invoke(message);
-
-                    await Task.Delay(intervalMs);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error polling controller: {ex.Message}");
-                    await Task.Delay(intervalMs);
-                }
-            }
-        }
-        */
         private void ReacquireDevice()
         {
             try
@@ -320,8 +377,8 @@ namespace NOFFBController
 
                 };
                 effectParams.SetAxes(new int[] {ffbAxes[0],ffbAxes[1] },new int[]{0,0});
-                damperEffect = new Effect(_joystick, EffectGuid.Damper, effectParams);
-                damperEffect.Start();
+                ffbDamperEffect = new Effect(_joystick, EffectGuid.Damper, effectParams);
+                ffbDamperEffect.Start();
                 Console.WriteLine("Damper Enabled");
             }
             catch (SharpDXException ex)
@@ -371,7 +428,7 @@ namespace NOFFBController
                 }
 
 
-                Console.WriteLine($"{message.Magnitude}, {message.DirectionX}, {message.DirectionY}");
+                //Console.WriteLine($"{message.Magnitude}, {message.DirectionX}, {message.DirectionY}");
 
                     //Effect? ffbEffect = null;
                 //int sleep = 16 - (int)timer.ElapsedMilliseconds;
@@ -396,40 +453,6 @@ namespace NOFFBController
                 }
             }
         }
-        public void ApplyFFBPeriodic(ForceFeedbackMessage message)
-        {
-
-        }
-
-        public void ApplyFFBSuspension(ForceFeedbackMessage message)
-        {
-
-        }
-
-        public void ApplyFFBSteeringForce(ForceFeedbackMessage message)
-        {
-
-        }
-
-        public void StopStaleEffects()
-        {
-
-            List<Guid> staleFx = new List<Guid>();
-            foreach (Guid key in _activeEffects.Keys)
-            {
-                if (_activeEffects[key].Status == 0)
-                {
-                    _activeEffects[key].Stop();
-                    _activeEffects[key].Dispose();
-                    staleFx.Add(key);
-                }
-            }
-            foreach (Guid k in staleFx)
-            {
-                _activeEffects.Remove(k);
-            }
-            staleFx.Clear();
-        }
 
         public void StopAllEffects()
         {
@@ -450,5 +473,244 @@ namespace NOFFBController
             _joystick?.Dispose();
             _directInput?.Dispose();
         }
+
+        public void FFBConstantForce(FFBControlMessage msg)
+        {
+            if (_joystick == null) return;
+            int magnitude;
+            int[] axes;
+            int[] directions;
+            EffectParameters parameters;
+            try
+            {
+                if (!IsDeviceReady())
+                {
+                    ReacquireDevice();
+                }
+
+                switch (msg.Values[0])
+                {
+                    case 1:
+                        axes = new int[] { ffbAxes[1] };
+                        magnitude = msg.Values[2];
+                        directions = new int[]{ 0 };
+                        parameters = new EffectParameters
+                        {
+
+                            Duration = int.MaxValue,
+                            Gain = 10000,
+                            TriggerButton = -1,
+                            Flags = EffectFlags.Cartesian | EffectFlags.ObjectIds,  // Changed to ObjectIds
+                            Axes = axes,
+                            Directions = directions,
+                            Parameters = new ConstantForce { Magnitude = magnitude }
+                        };
+                        if (null == ffbConstantEffect)
+                        {
+                            ffbConstantEffect = new Effect(_joystick, EffectGuid.ConstantForce, parameters);
+                            ffbConstantEffect.Start();
+                        }
+                        else
+                        {
+                            ffbConstantEffect.SetParameters(parameters, EffectParameterFlags.TypeSpecificParameters);
+                            parameters.Directions = directions;
+                            ffbConstantEffect.SetParameters(parameters, EffectParameterFlags.Direction);
+                        }
+                        break;
+                    case 2:
+                        axes = new int[]{ ffbAxes[0], ffbAxes[1] };
+                        magnitude = msg.Values[1];
+                        directions = new int[]{ msg.Values[2], msg.Values[3] };
+                        parameters = new EffectParameters
+                        {
+                            Duration = int.MaxValue,
+                            Gain = 10000,
+                            TriggerButton = -1,
+                            Flags = EffectFlags.Cartesian | EffectFlags.ObjectIds,  // Changed to ObjectIds
+                            Axes = axes,
+                            Directions = directions,
+                            Parameters = new ConstantForce { Magnitude = magnitude }
+                        };
+
+                        if (null == ffbConstantEffect)
+                        {
+                            ffbConstantEffect = new Effect(_joystick, EffectGuid.ConstantForce, parameters);
+                            ffbConstantEffect.Start();
+                        }
+                        else
+                        {
+                            ffbConstantEffect.SetParameters(parameters, EffectParameterFlags.TypeSpecificParameters);
+                            parameters.Directions = directions;
+                            ffbConstantEffect.SetParameters(parameters, EffectParameterFlags.Direction);
+                        }
+                        break;
+                    default:
+                        Console.WriteLine($"FFBConstantForce Axis Number Value incorrect!!");
+                        Console.WriteLine(msg.ToString());
+                        break;
+
+                }
+            }
+            catch (SharpDXException ex)
+            {
+                Console.WriteLine($"FFBConstantForce Exception: {ex.Message}");
+            }
+
+
+        }
+
+        public void FFBDamper(FFBControlMessage msg)
+        {
+            if (_joystick == null) return;
+            Condition[] conditions;
+            ConditionSet conditionSet;
+            EffectParameters effectParams;
+
+           switch (ffbAxes.Count)
+           {
+                case 1:
+                    Console.WriteLine("FFBDamper: Setting Single axis Damper");
+                    conditions = new Condition[1];
+                    // X-Axis Damper
+                    conditions[0] = new Condition
+                    {
+                        Offset = 0,                      // Center point offset (-10000 to 10000)
+                        PositiveCoefficient = msg.Values[0],     // Resistance moving positive (-10000 to 10000)
+                        NegativeCoefficient = msg.Values[0],     // Resistance moving negative (-10000 to 10000)
+                        PositiveSaturation = 10000,      // Max force positive (0 to 10000)
+                        NegativeSaturation = 10000,      // Max force negative (0 to 10000)
+                        DeadBand = 0                     // Dead zone around center (0 to 10000)
+                    };
+                    conditionSet = new ConditionSet();
+                    conditionSet.Conditions = conditions;
+                    // Create effect parameters
+                    effectParams = new EffectParameters
+                    {
+                        Duration = int.MaxValue,         // Infinite duration
+                        Gain = 10000,                    // Overall strength (0-10000)
+                        TriggerButton = -1,              // No button trigger
+                        TriggerRepeatInterval = 0,
+                        SamplePeriod = 0,                // Use default
+                        Flags = EffectFlags.Polar | EffectFlags.ObjectIds,
+                        Parameters = conditionSet
+
+                    };
+                    effectParams.SetAxes(new int[] { ffbAxes[0], ffbAxes[1] }, new int[] { 0, 0 });
+                    if (null == ffbDamperEffect)
+                    {
+                        ffbDamperEffect = new Effect(_joystick, EffectGuid.Damper, effectParams);
+                        ffbDamperEffect.Start();
+                    } else
+                    {
+                        ffbDamperEffect.Stop();
+                        ffbDamperEffect.Dispose();
+                        ffbDamperEffect = new Effect(_joystick, EffectGuid.Damper, effectParams);
+                        ffbDamperEffect.Start();
+                    }
+
+
+                        break;
+                case 2:
+                    Console.WriteLine("FFBDamper: Setting Dual axis Damper");
+                    conditions = new Condition[2];
+                    // X-Axis Damper
+                    conditions[0] = new Condition
+                    {
+                        Offset = 0,                      // Center point offset (-10000 to 10000)
+                        PositiveCoefficient = msg.Values[0],     // Resistance moving positive (-10000 to 10000)
+                        NegativeCoefficient = msg.Values[0],     // Resistance moving negative (-10000 to 10000)
+                        PositiveSaturation = 10000,      // Max force positive (0 to 10000)
+                        NegativeSaturation = 10000,      // Max force negative (0 to 10000)
+                        DeadBand = 0                     // Dead zone around center (0 to 10000)
+                    };
+                    // Y-Axis Damper
+                    conditions[1] = new Condition
+                    {
+                        Offset = 0,                      // Center point offset (-10000 to 10000)
+                        PositiveCoefficient = msg.Values[0],     // Resistance moving positive (-10000 to 10000)
+                        NegativeCoefficient = msg.Values[0],     // Resistance moving negative (-10000 to 10000)
+                        PositiveSaturation = 10000,      // Max force positive (0 to 10000)
+                        NegativeSaturation = 10000,      // Max force negative (0 to 10000)
+                        DeadBand = 0                     // Dead zone around center (0 to 10000)
+                    };
+                    conditionSet = new ConditionSet();
+                    conditionSet.Conditions = conditions;
+                    // Create effect parameters
+                    effectParams = new EffectParameters
+                    {
+                        Duration = int.MaxValue,         // Infinite duration
+                        Gain = 10000,                    // Overall strength (0-10000)
+                        TriggerButton = -1,              // No button trigger
+                        TriggerRepeatInterval = 0,
+                        SamplePeriod = 0,                // Use default
+                        Flags = EffectFlags.Polar | EffectFlags.ObjectIds,
+                        Parameters = conditionSet
+
+                    };
+                    effectParams.SetAxes(new int[] { ffbAxes[0], ffbAxes[1] }, new int[] { 0, 0 });
+                    if (null == ffbDamperEffect)
+                    {
+                        ffbDamperEffect = new Effect(_joystick, EffectGuid.Damper, effectParams);
+                        ffbDamperEffect.Start();
+                    }
+                    else
+                    {
+                        ffbDamperEffect.SetParameters(effectParams, EffectParameterFlags.TypeSpecificParameters);
+                    }
+                    break;
+                default:
+                    break;
+           }        
+        }
+
+        public void FFBAutoCenter(FFBControlMessage msg)
+        {
+            try
+            {
+                if (null != ffbConstantEffect)
+                {
+                    ffbConstantEffect.Stop();
+                    ffbConstantEffect.Dispose();
+                    ffbConstantEffect = null;
+
+                }
+
+                if (null != ffbDamperEffect)
+                {
+                    ffbDamperEffect.Stop();
+                    ffbDamperEffect.Dispose();
+                    ffbDamperEffect = null;
+                }
+            } catch (SharpDXException ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+
+            bool action;
+            switch (msg.Values[0])
+            {
+                case 0:
+                    action = false;
+                    _joystick.Unacquire();
+                    Thread.Sleep(1000);
+                    _joystick.Properties.AutoCenter = action;
+                    Console.WriteLine($"FFBAutoCente: disabled autocenter");
+                    _joystick.Acquire();
+                    break;
+                case 1:
+                    action = true;
+                    _joystick.Unacquire();
+                    Thread.Sleep(1000);
+                    _joystick.Properties.AutoCenter = action;
+                    Console.WriteLine($"FFBAutoCente: enabled autocenter");
+                    _joystick.Acquire();
+                    break;
+                default:
+                    break;
+            }
+        }
     }
+
+
+
 }

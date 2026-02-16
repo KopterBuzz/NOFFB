@@ -1,4 +1,6 @@
-﻿namespace NOFFBController.Messages
+﻿using NOFFBMessaging;
+
+namespace NOFFBController.Messages
 {
     /// <summary>
     /// Message containing controller input state (axes and buttons)
@@ -58,6 +60,5 @@
                 return null;
             }
         }
-
     }
 }

@@ -34,6 +34,11 @@ namespace NOFFB
         internal int testX = 2000;
         internal int testY = 2000;
 
+        internal bool autocenter = false;
+        internal bool joystickwasreset = false;
+
+        internal float damperGain = 0.3f;
+
         bool isMission;
 
         Player player;
@@ -96,11 +101,32 @@ namespace NOFFB
             Logger.LogDebug("AWAKE!");
             // Setup config
             Configuration.InitSettings(Config);
+            barValues["tPitch"] = Configuration.FFB_FBWPushBack_Factor.Value;
+            barValues["tRoll"] = Configuration.FFB_FBWPushBack_Factor.Value;
 
         }
 
         void Update()
         {
+
+            if (autocenter != Configuration.FFB_AutoCenter.Value)
+            {
+                string msg = $"autocenter,{(Configuration.FFB_AutoCenter.Value ? 1 : 0)}";
+                Plugin.Logger.LogDebug($"SENDER SIDE: {msg}");
+                udp.SendData(msg);
+                autocenter = Configuration.FFB_AutoCenter.Value;
+                joystickwasreset = true;
+            }
+
+            if (damperGain != Configuration.FFB_DamperGain.Value || joystickwasreset)
+            {
+                string msg = $"damper,{(int)((Configuration.FFB_DamperGain.Value * 10000))}";
+                Plugin.Logger.LogDebug($"SENDER SIDE: {msg}");
+                udp.SendData(msg);
+                damperGain = Configuration.FFB_DamperGain.Value;
+                joystickwasreset = false;
+            }
+
             isMission = MissionManager.IsRunning;
             if (isMission)
             {
@@ -108,8 +134,7 @@ namespace NOFFB
                 if (null != aircraft)
                 {
                     pollAircraft = true;
-                    PollAircraft(aircraft);
-                    
+                    PollAircraft(aircraft);  
                 } else
                 {
                     pollAircraft = false;
@@ -160,52 +185,66 @@ namespace NOFFB
             float roll_ = Mathf.Abs(barValues["RawRoll"]);
             float fbwRoll_ = Mathf.Abs(barValues["FBWRoll"]);
 
+            
+
             if (roll_ > fbwRoll_)
             {
-                
-                rollDiff = barValues["RawRoll"] - barValues["FBWRoll"];
-                if(rollDiff > barValues["rollDiffBuffer"])
+               
+                if (Configuration.FFB_xAxisInvert.Value)
                 {
-                    barValues["rollDiffBuffer"] = rollDiff;
-                    
+                    rollDiff = -(roll_);
+                } else
+                {
+                    rollDiff = roll_;
                 }
-                xForce += (Mathf.Lerp(barValues["rollDiffBuffer"], barValues["RawRoll"], barValues["tRoll"]));
-                barValues["tRoll"] += 0.5f * Time.fixedDeltaTime;
-                barValues["rollDiffBuffer"] = xForce;
+                xForce += (Mathf.Lerp(barValues["ForceRoll"], Mathf.Sign(barValues["RawRoll"]) * rollDiff, barValues["tRoll"]));
+                barValues["tRoll"] += barValues["tRoll"] * Time.fixedDeltaTime;
             } else
             {
-                barValues["rollDiffBuffer"] = 0f;
-                barValues["tRoll"] = Configuration.FFB_FBWPushBack_Factor.Value;
+                xForce = Mathf.Lerp(barValues["ForceRoll"], 0f, barValues["tRoll"]);
+                barValues["tRoll"] -= barValues["tRoll"] * Time.fixedDeltaTime;
+
             }
 
             if (pitch_ > fbwPitch_)
             {
-
-                pitchDiff = barValues["RawPitch"] - barValues["FBWPitch"];
-                if (pitchDiff > barValues["pitchDiffBuffer"])
+                if (Configuration.FFB_yAxisInvert.Value)
                 {
-                    barValues["pitchDiffBuffer"] = pitchDiff;
-
+                    pitchDiff = -(pitch_);
+                } else
+                {
+                    pitchDiff = pitch_;
                 }
-                yForce += (Mathf.Lerp(barValues["pitchDiffBuffer"], barValues["RawPitch"], barValues["tPitch"]));
-                barValues["tPitch"] += 0.5f * Time.fixedDeltaTime;
-                barValues["pitchDiffBuffer"] = yForce;
+
+                yForce += (Mathf.Lerp(barValues["ForcePitch"], Mathf.Sign(barValues["RawPitch"]) * pitchDiff, barValues["tPitch"]));
+                barValues["tPitch"] += barValues["tPitch"] * Time.fixedDeltaTime;
             }
             else
             {
-                barValues["pitchDiffBuffer"] = 0f;
-                barValues["tPitch"] = Configuration.FFB_FBWPushBack_Factor.Value;
+                yForce = Mathf.Lerp(barValues["ForcePitch"], 0f, Configuration.FFB_FBWPushBack_Factor.Value * Time.fixedDeltaTime);
+                barValues["tPitch"] -= barValues["tPitch"] * Time.fixedDeltaTime;
+
             }
+            barValues["tRoll"] = Mathf.Clamp(barValues["tRoll"], 0f, 1f);
+            barValues["tPitch"] = Mathf.Clamp(barValues["tPitch"], 0f, 1f);
 
             xForce = Mathf.Clamp(xForce, -1.0f, 1.0f);
             yForce = Mathf.Clamp(yForce, -1.0f, 1.0f);
+            barValues["ForceRoll"] = xForce;
+            barValues["ForcePitch"] = yForce;
 
             float normalizedMagnitude = Mathf.Clamp((float)Mathf.Sqrt(yForce * yForce + xForce * xForce),-1f,1f);
-
+            /*
+            if (normalizedMagnitude <= 0.01f)
+            {
+                barValues["tRroll"] = Configuration.FFB_FBWPushBack_Factor.Value;
+                barValues["tPitch"] = Configuration.FFB_FBWPushBack_Factor.Value;
+            }
+            */
             force[0] = (int)(normalizedMagnitude * 10000f * Configuration.FFB_Gain.Value);
 
-            if (Configuration.FFB_xAxisInvert.Value) { xForce = -xForce; }
-            if (Configuration.FFB_yAxisInvert.Value) { yForce = -yForce; }
+            //if (Configuration.FFB_xAxisInvert.Value) { xForce = -xForce; }
+            //if (Configuration.FFB_yAxisInvert.Value) { yForce = -yForce; }
 
             float angle = ConvertToPositiveAngle2(Mathf.Atan2(yForce, xForce) * 180f / Mathf.PI);
             barValues["ForcePitch"] = yForce;
@@ -227,10 +266,18 @@ namespace NOFFB
             int[] force = new int[3];
             return force;
         }
-        int[] CalculateFFB_Stall()
+        int CalculateFFB_Stall(int inputForce)
         {
-            int[] force = new int[3];
-            return force;
+            Vector3 vector = aircraft.cockpit.transform.InverseTransformDirection(aircraft.cockpit.rb.velocity);
+            float aoaRatio = Mathf.Clamp(Mathf.Abs(Mathf.Atan2(vector.y, vector.z) * -57.29578f), 0f, 60f) / 60f;
+            if (aoaRatio > 0.5f)
+            {
+                return (int)((float)inputForce * aoaRatio);
+            } else
+            {
+                return inputForce;
+            }
+            
         }
         int[] CalculateFFB_Suspension()
         {
@@ -255,7 +302,7 @@ namespace NOFFB
 
         void SendFFB(int[] data)
         {
-            string msg = $"ConstantForce,{data[0]},{data[1]},{data[2]}";
+            string msg = $"constantforce,{2},{data[0]},{data[1]},{data[2]}";
             Plugin.Logger.LogDebug($"SENDER SIDE: {msg}");
             udp.SendData(msg);
         }
@@ -320,8 +367,14 @@ namespace NOFFB
             GUI.Label(new Rect(rectX, labelY + 20, 200, 20), "ForceRoll: " + barValues["ForceRoll"].ToString("F2"));
             GUI.Label(new Rect(rectX, labelY + 40, 200, 20), "ForceMagnitude: " + barValues["ForceMagnitude"].ToString("F2"));
             GUI.Label(new Rect(rectX, labelY + 60, 200, 20), "ForceAngle: " + barValues["ForceAngle"].ToString("F2"));
-
-
+            GUI.Label(new Rect(rectX, labelY + 80, 200, 20), "RawPitch: " + barValues["RawPitch"].ToString("F2"));
+            GUI.Label(new Rect(rectX, labelY + 100, 200, 20), "FBWPitch: " + barValues["FBWPitch"].ToString("F2"));
+            GUI.Label(new Rect(rectX, labelY + 120, 200, 20), "RawRoll: " + barValues["RawRoll"].ToString("F2"));
+            GUI.Label(new Rect(rectX, labelY + 140, 200, 20), "FBWRoll: " + barValues["FBWRoll"].ToString("F2"));
+            GUI.Label(new Rect(rectX, labelY + 160, 200, 20), "tPitch: " + barValues["tPitch"].ToString("F2"));
+            GUI.Label(new Rect(rectX, labelY + 180, 200, 20), "tRoll: " + barValues["tRoll"].ToString("F2"));
+            GUI.Label(new Rect(rectX, labelY + 200, 200, 20), "pitchDiffBuffer: " + barValues["pitchDiffBuffer"].ToString("F2"));
+            GUI.Label(new Rect(rectX, labelY + 220, 200, 20), "rollDiffBuffer: " + barValues["rollDiffBuffer"].ToString("F2"));
             // Make the window draggable
             GUI.DragWindow();
         }

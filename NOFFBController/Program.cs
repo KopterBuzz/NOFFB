@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NOFFBController;
 using NOFFBController.Messages;
+using NOFFBMessaging;
 using SharpDX;
 using SharpDX.DirectInput;
 
@@ -48,34 +49,6 @@ namespace NOFFBController
 
                 ProcessPacket(buffer.AsSpan(0, bytesReceived),controller);
             }
-
-            /*
-            try
-            {
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    // This blocks until a message arrives (FIFO)
-                    string message = await listener.ReadAsync(cts.Token);
-
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {message}");
-                    if (null != message)
-                    {
-                        try
-                        {
-                            controller.ApplyForceFeedback(ForceFeedbackMessage.FromCsv(message));
-                        } catch (Exception ex)
-                        {
-                            Console.WriteLine($"Error Reading Force Feedback Message: {ex.Message}");
-                        }
-                        
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // normal shutdown
-            }
-            */
             Console.WriteLine("Exited cleanly.");
         }
 
@@ -85,7 +58,23 @@ namespace NOFFBController
             try
             {
                 string message = Encoding.UTF8.GetString(data);
-                controller.ApplyFFBConstantForce(ForceFeedbackMessage.FromCsv(message));
+                Console.WriteLine(message);
+                FFBControlMessage msg = FFBControlMessage.FromCsv2(message);
+                switch (msg.Type)
+                {
+                    case "autocenter":
+                        controller.FFBAutoCenter(msg);
+                        break;
+                    case "constantforce":
+                        controller.FFBConstantForce(msg);
+                        break;
+                    case "damper":
+                        controller.FFBDamper(msg);
+                        break;
+                    default:
+                        break;
+                }
+                //controller.ApplyFFBConstantForce(ForceFeedbackMessage.FromCsv(message));
             }
             catch (Exception ex)
             {

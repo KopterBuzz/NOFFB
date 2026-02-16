@@ -29,12 +29,15 @@ namespace NOFFB
 
         internal static ConfigEntry<float> FFB_Gain;
         internal static float FFB_Gain_Default = 0.5f;
-        /*
-        internal static ConfigEntry<bool> FFB_Damper;
-        internal static bool FFB_Damper_Default = true;
+
+        internal static ConfigEntry<bool> FFB_AutoCenter;
+        internal static bool FB_AutoCenter_Default = true;
+        
+        //internal static ConfigEntry<bool> FFB_Damper;
+        //internal static bool FFB_Damper_Default = true;
         internal static ConfigEntry<float> FFB_DamperGain;
-        internal static float FFB_DamperGain_Default = 0.2f;
-        */
+        internal static float FFB_DamperGain_Default = 0.3f;
+        
         /*
         internal static ConfigEntry<bool>  FFB_FBWPushBack;
         internal static bool FFB_FBWPushBack_Default = true;
@@ -84,11 +87,15 @@ namespace NOFFB
             FFB_xAxisInvert = config.Bind(GeneralSettings, "FFB_xAxisInvert", FFB_xAxisInvert_Default, "Invert force feedback on the X axis.");
             FFB_yAxisInvert = config.Bind(GeneralSettings, "FFB_yAxisInvert", FFB_yAxisInvert_Default, "Invert force feedback on the Y axis.");
 
+            FFB_AutoCenter = config.Bind(GeneralSettings, "FFB_FFB_AutoCenter", FB_AutoCenter_Default, "Toggle Auto Center.");
+
             FFB_Gain = config.Bind(GeneralSettings, "FFB_Gain", FFB_Gain_Default, "Master gain for all force feedback effects.");
             Mathf.Clamp(FFB_Gain.Value, 0f, 1f);
-            //FFB_Damper = config.Bind(GeneralSettings, "FFB_Damper", FFB_Damper_Default, "Enable damper effect.");
-            //FFB_DamperGain = config.Bind(GeneralSettings, "FFB_DamperGain", FFB_DamperGain_Default, "Gain for damper effect.");
 
+
+            //FFB_Damper = config.Bind(GeneralSettings, "FFB_Damper", FFB_Damper_Default, "Enable damper effect.");
+            FFB_DamperGain = config.Bind(GeneralSettings, "FFB_DamperGain", FFB_DamperGain_Default, "Gain for damper effect.");
+            Mathf.Clamp(FFB_DamperGain.Value, 0f, 1f);
             // Flight Stick Settings
             //FFB_FBWPushBack = config.Bind(FlightStickSettings, "FFB_FBWPushBack", FFB_FBWPushBack_Default, "Enable FBW push back effect.");
             //FFB_FBWPushBack_Gain = config.Bind(FlightStickSettings, "FFB_FBWPushBack_Gain", FFB_FBWPushBack_Gain_Default, "Gain for FBW push back effect.");
