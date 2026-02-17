@@ -20,9 +20,6 @@ namespace NOFFBController
         private int nextOffset = 0;
         Effect ffbConstantEffect;
         Effect ffbDamperEffect;
-        Effect periodicEffect;
-        Effect suspensionEffect;
-        Effect steeringForceEffect;
 
         List<int> ffbAxes = new List<int>();
 
@@ -544,6 +541,33 @@ namespace NOFFBController
                             ffbConstantEffect.SetParameters(parameters, EffectParameterFlags.Direction);
                         }
                         break;
+                    case 3:
+                        axes = new int[] { ffbAxes[1], ffbAxes[0] };
+                        magnitude = msg.Values[1];
+                        directions = new int[] { msg.Values[2], msg.Values[3] };
+                        parameters = new EffectParameters
+                        {
+                            Duration = int.MaxValue,
+                            Gain = 10000,
+                            TriggerButton = -1,
+                            Flags = EffectFlags.Cartesian | EffectFlags.ObjectIds,  // Changed to ObjectIds
+                            Axes = axes,
+                            Directions = directions,
+                            Parameters = new ConstantForce { Magnitude = magnitude }
+                        };
+
+                        if (null == ffbConstantEffect)
+                        {
+                            ffbConstantEffect = new Effect(_joystick, EffectGuid.ConstantForce, parameters);
+                            ffbConstantEffect.Start();
+                        }
+                        else
+                        {
+                            ffbConstantEffect.SetParameters(parameters, EffectParameterFlags.TypeSpecificParameters);
+                            parameters.Directions = directions;
+                            ffbConstantEffect.SetParameters(parameters, EffectParameterFlags.Direction);
+                        }
+                        break;
                     default:
                         Console.WriteLine($"FFBConstantForce Axis Number Value incorrect!!");
                         Console.WriteLine(msg.ToString());
@@ -670,7 +694,7 @@ namespace NOFFBController
                 if (null != ffbConstantEffect)
                 {
                     ffbConstantEffect.Stop();
-                    ffbConstantEffect.Dispose();
+                    //ffbConstantEffect.Dispose();
                     ffbConstantEffect = null;
 
                 }
@@ -678,7 +702,7 @@ namespace NOFFBController
                 if (null != ffbDamperEffect)
                 {
                     ffbDamperEffect.Stop();
-                    ffbDamperEffect.Dispose();
+                    //ffbDamperEffect.Dispose();
                     ffbDamperEffect = null;
                 }
             } catch (SharpDXException ex)

@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using BepInEx;
 using BepInEx.Bootstrap;
-using BepInEx.Logging;
 using BepInEx.Configuration;
-using UnityEngine;
-using SharpDX.DirectInput;
-using System.Threading.Tasks;
+using BepInEx.Logging;
 using NuclearOption.Networking;
+using SharpDX.DirectInput;
+using UnityEngine;
+using static System.Collections.Specialized.BitVector32;
 
 namespace NOFFB
 {
@@ -15,12 +16,17 @@ namespace NOFFB
     {
         public const string PLUGIN_GUID = "NOFFB";
         public const string PLUGIN_NAME = "NOFFB";
-        public const string PLUGIN_VERSION = "0.1";
+        public const string PLUGIN_VERSION = "0.2";
     }
     [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
     [BepInProcess("NuclearOption.exe")]
     public class Plugin : BaseUnityPlugin
     {
+        internal enum FFBTypes
+        {
+            Aircraft = 0,
+            Different = 1
+        }
         internal static new ManualLogSource? Logger;
         //internal FFBManager ffb;
         internal bool ffbAcquired = false;
@@ -36,16 +42,23 @@ namespace NOFFB
 
         internal bool autocenter = false;
         internal bool joystickwasreset = false;
+        internal bool startupHappened = false;
 
         internal float damperGain = 0.3f;
 
         bool isMission;
+
+        internal int ffbType = 0;
 
         Player player;
         PilotPlayerState playerState;
         Aircraft aircraft;
         bool pollAircraft;
         Vector3 aircraftAccel;
+
+        WeaponStation station;
+        string weaponNamePrev = string.Empty;
+        int ammoCountPrev = 0;
 
 
         UDPClient udp;
@@ -109,13 +122,14 @@ namespace NOFFB
         void Update()
         {
 
-            if (autocenter != Configuration.FFB_AutoCenter.Value)
+            if (autocenter != Configuration.FFB_AutoCenter.Value || !startupHappened)
             {
                 string msg = $"autocenter,{(Configuration.FFB_AutoCenter.Value ? 1 : 0)}";
                 Plugin.Logger.LogDebug($"SENDER SIDE: {msg}");
                 udp.SendData(msg);
                 autocenter = Configuration.FFB_AutoCenter.Value;
                 joystickwasreset = true;
+                startupHappened = true;
             }
 
             if (damperGain != Configuration.FFB_DamperGain.Value || joystickwasreset)
@@ -134,7 +148,10 @@ namespace NOFFB
                 if (null != aircraft)
                 {
                     pollAircraft = true;
-                    PollAircraft(aircraft);  
+                    PollAircraft(aircraft);
+
+
+
                 } else
                 {
                     pollAircraft = false;
@@ -145,7 +162,7 @@ namespace NOFFB
         void PollAircraft(Aircraft aircraft)
         {
             aircraftAccel = aircraft.accel;
-            
+
             if (aircraft.pilots[0].currentState.GetType() == typeof(PilotPlayerState))
             {
                 playerState = (PilotPlayerState)aircraft.pilots[0].currentState;
@@ -156,11 +173,13 @@ namespace NOFFB
                 barValues["FBWPitch"] = input.pitch;
                 barValues["FBWRoll"] = input.roll;
                 barValues["FBWYaw"] = input.yaw;
+
+
             }
         }
 
-       
-        int[] CalculateFFFB_FBWPushback()
+
+        int[] CalucateAircraftFFB(bool recoil)
         {
 
             float ConvertToPositiveAngle2(float angle)
@@ -171,7 +190,7 @@ namespace NOFFB
                     angle = 359.99f;
                 }
                 return angle_;
-                
+
             }
             int[] force = new int[3];
             float pitchDiff = 0f;
@@ -185,23 +204,27 @@ namespace NOFFB
             float roll_ = Mathf.Abs(barValues["RawRoll"]);
             float fbwRoll_ = Mathf.Abs(barValues["FBWRoll"]);
 
-            
+
+
+
 
             if (roll_ > fbwRoll_)
             {
-               
+
                 if (Configuration.FFB_xAxisInvert.Value)
                 {
                     rollDiff = -(roll_);
-                } else
+                }
+                else
                 {
                     rollDiff = roll_;
                 }
                 xForce += (Mathf.Lerp(barValues["ForceRoll"], Mathf.Sign(barValues["RawRoll"]) * rollDiff, barValues["tRoll"]));
                 barValues["tRoll"] += barValues["tRoll"] * Time.fixedDeltaTime;
-            } else
+            }
+            else
             {
-                xForce = Mathf.Lerp(barValues["ForceRoll"], 0f, barValues["tRoll"]);
+                xForce += Mathf.Lerp(barValues["ForceRoll"], 0f, barValues["tRoll"]);
                 barValues["tRoll"] -= barValues["tRoll"] * Time.fixedDeltaTime;
 
             }
@@ -211,7 +234,8 @@ namespace NOFFB
                 if (Configuration.FFB_yAxisInvert.Value)
                 {
                     pitchDiff = -(pitch_);
-                } else
+                }
+                else
                 {
                     pitchDiff = pitch_;
                 }
@@ -221,19 +245,31 @@ namespace NOFFB
             }
             else
             {
-                yForce = Mathf.Lerp(barValues["ForcePitch"], 0f, Configuration.FFB_FBWPushBack_Factor.Value * Time.fixedDeltaTime);
+                yForce += Mathf.Lerp(barValues["ForcePitch"], 0f, Configuration.FFB_FBWPushBack_Factor.Value * Time.fixedDeltaTime);
                 barValues["tPitch"] -= barValues["tPitch"] * Time.fixedDeltaTime;
 
             }
             barValues["tRoll"] = Mathf.Clamp(barValues["tRoll"], 0f, 1f);
             barValues["tPitch"] = Mathf.Clamp(barValues["tPitch"], 0f, 1f);
 
+            if (recoil)
+            {
+                if (Configuration.FFB_yAxisInvert.Value)
+                {
+                    yForce += -Configuration.FFB_GunRecoil_Gain.Value;
+                }
+                else
+                {
+                    yForce += Configuration.FFB_GunRecoil_Gain.Value;
+                }
+            }
+
             xForce = Mathf.Clamp(xForce, -1.0f, 1.0f);
             yForce = Mathf.Clamp(yForce, -1.0f, 1.0f);
             barValues["ForceRoll"] = xForce;
             barValues["ForcePitch"] = yForce;
 
-            float normalizedMagnitude = Mathf.Clamp((float)Mathf.Sqrt(yForce * yForce + xForce * xForce),-1f,1f);
+            float normalizedMagnitude = Mathf.Clamp((float)Mathf.Sqrt(yForce * yForce + xForce * xForce), -1f, 1f);
             /*
             if (normalizedMagnitude <= 0.01f)
             {
@@ -292,17 +328,39 @@ namespace NOFFB
 
         void FixedUpdate()
         {
-            if (null != aircraft && pollAircraft)
+            if (null != aircraft)
             {
-                int[] data = CalculateFFFB_FBWPushback();
-                SendFFB(data);
-                //CalculateStickWeightForce();
+                station = aircraft.weaponManager.currentWeaponStation;
+                if (weaponNamePrev != station.WeaponInfo.weaponName)
+                {
+                    weaponNamePrev = station.WeaponInfo.weaponName;
+
+                    ammoCountPrev = station.Ammo;
+                }
+                bool recoil = false;
+                if (null != aircraft && pollAircraft)
+                {
+                    if (station.WeaponInfo.gun && station.Ammo < ammoCountPrev)
+                    {
+                        recoil = true;
+                        ammoCountPrev = station.Ammo;
+                    }
+
+                    int[] data = CalucateAircraftFFB(recoil);
+                    SendFFB(data);
+                    //CalculateStickWeightForce();
+                }
             }
         }
 
         void SendFFB(int[] data)
         {
-            string msg = $"constantforce,{2},{data[0]},{data[1]},{data[2]}";
+            int axis = 2;
+            if (Configuration.FFB_SwapStickAxis.Value == true)
+            {
+                axis = 3;
+            }
+            string msg = $"constantforce,{axis},{data[0]},{data[1]},{data[2]}";
             Plugin.Logger.LogDebug($"SENDER SIDE: {msg}");
             udp.SendData(msg);
         }
@@ -375,6 +433,11 @@ namespace NOFFB
             GUI.Label(new Rect(rectX, labelY + 180, 200, 20), "tRoll: " + barValues["tRoll"].ToString("F2"));
             GUI.Label(new Rect(rectX, labelY + 200, 200, 20), "pitchDiffBuffer: " + barValues["pitchDiffBuffer"].ToString("F2"));
             GUI.Label(new Rect(rectX, labelY + 220, 200, 20), "rollDiffBuffer: " + barValues["rollDiffBuffer"].ToString("F2"));
+            if (null != station)
+            {
+                GUI.Label(new Rect(rectX, labelY + 240, 200, 20), "station: " + station.WeaponInfo.weaponName);
+                GUI.Label(new Rect(rectX, labelY + 260, 200, 20), "ammo: " + station.Ammo);
+            }
             // Make the window draggable
             GUI.DragWindow();
         }
