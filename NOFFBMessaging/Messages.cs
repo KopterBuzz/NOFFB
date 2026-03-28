@@ -66,7 +66,8 @@ Type : constantforce
 Values[0]: Axis Number - 1 or 2
 Values[1]: Magnitude
 Values[2]: Dir X
-Values[3]: Dir y
+Values[3]: Dir Y
+
 
 PERIODIC_X:
 Type : periodicx
@@ -86,4 +87,13 @@ FRICTION:
 Type : friction
 Values[0]: Coefficient strength
 
+Type: constantforce2
+Values[0]: Axis Number 1
+Values[1]: Magnitude
+Values[2]: Dir X
+Values[3]: Dir Y
+Values[4]: Damper X
+Values[5]: Damper Y
+Values[6]: Friction X
+Values[7]: Friction Y
 */

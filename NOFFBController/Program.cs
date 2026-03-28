@@ -66,10 +66,18 @@ namespace NOFFBController
                         controller.FFBAutoCenter(msg);
                         break;
                     case "constantforce":
-                        controller.FFBConstantForce(msg);
+                        controller.FFBConstantForce(msg.Values[0], msg.Values[1], msg.Values[2], msg.Values[3]);
+                        break;
+                    case "constantforce2":
+                        controller.FFBConstantForce(msg.Values[0], msg.Values[1], msg.Values[2], msg.Values[3]);
+                        //controller.FFBDamper(msg);
+                        controller.FFBDamper(msg.Values[4], msg.Values[5]);
+                        controller.FFBFriction(msg.Values[6], msg.Values[7]);
                         break;
                     case "damper":
-                        controller.FFBDamper(msg);
+                        controller.FFBDamper(msg.Values[0], msg.Values[0]);
+                        break;
+                    case "friction":
                         break;
                     default:
                         break;

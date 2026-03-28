@@ -20,6 +20,7 @@ namespace NOFFBController
         private int nextOffset = 0;
         Effect ffbConstantEffect;
         Effect ffbDamperEffect;
+        Effect ffbFrictionEffect;
 
         List<int> ffbAxes = new List<int>();
 
@@ -471,10 +472,9 @@ namespace NOFFBController
             _directInput?.Dispose();
         }
 
-        public void FFBConstantForce(FFBControlMessage msg)
+        public void FFBConstantForce(int axisNumber, int magnitude, int directionX, int directionY)
         {
             if (_joystick == null) return;
-            int magnitude;
             int[] axes;
             int[] directions;
             EffectParameters parameters;
@@ -484,12 +484,11 @@ namespace NOFFBController
                 {
                     ReacquireDevice();
                 }
-
-                switch (msg.Values[0])
+                Console.WriteLine($"FFBConstantForce: MESSAGE AXIS VALUE:{axisNumber}");
+                switch (axisNumber)
                 {
                     case 1:
-                        axes = new int[] { ffbAxes[1] };
-                        magnitude = msg.Values[2];
+                        axes = new int[] { ffbAxes[0] };
                         directions = new int[]{ 0 };
                         parameters = new EffectParameters
                         {
@@ -497,7 +496,7 @@ namespace NOFFBController
                             Duration = int.MaxValue,
                             Gain = 10000,
                             TriggerButton = -1,
-                            Flags = EffectFlags.Cartesian | EffectFlags.ObjectIds,  // Changed to ObjectIds
+                            Flags = EffectFlags.Cartesian | EffectFlags.ObjectIds,
                             Axes = axes,
                             Directions = directions,
                             Parameters = new ConstantForce { Magnitude = magnitude }
@@ -516,8 +515,7 @@ namespace NOFFBController
                         break;
                     case 2:
                         axes = new int[]{ ffbAxes[0], ffbAxes[1] };
-                        magnitude = msg.Values[1];
-                        directions = new int[]{ msg.Values[2], msg.Values[3] };
+                        directions = new int[]{ directionX, directionY };
                         parameters = new EffectParameters
                         {
                             Duration = int.MaxValue,
@@ -531,11 +529,13 @@ namespace NOFFBController
 
                         if (null == ffbConstantEffect)
                         {
+                            Console.WriteLine($"FFBConstantForce: CREATING CONSTANTFORCE");
                             ffbConstantEffect = new Effect(_joystick, EffectGuid.ConstantForce, parameters);
                             ffbConstantEffect.Start();
                         }
                         else
                         {
+                            Console.WriteLine($"FFBConstantForce: UPDATING CONSTANTFORCE");
                             ffbConstantEffect.SetParameters(parameters, EffectParameterFlags.TypeSpecificParameters);
                             parameters.Directions = directions;
                             ffbConstantEffect.SetParameters(parameters, EffectParameterFlags.Direction);
@@ -543,8 +543,7 @@ namespace NOFFBController
                         break;
                     case 3:
                         axes = new int[] { ffbAxes[1], ffbAxes[0] };
-                        magnitude = msg.Values[1];
-                        directions = new int[] { msg.Values[2], msg.Values[3] };
+                        directions = new int[] { directionX, directionY };
                         parameters = new EffectParameters
                         {
                             Duration = int.MaxValue,
@@ -570,12 +569,12 @@ namespace NOFFBController
                         break;
                     default:
                         Console.WriteLine($"FFBConstantForce Axis Number Value incorrect!!");
-                        Console.WriteLine(msg.ToString());
+                        Console.WriteLine($"{axisNumber},{magnitude},{directionX},{directionY}");
                         break;
 
                 }
             }
-            catch (SharpDXException ex)
+            catch (Exception ex)
             {
                 Console.WriteLine($"FFBConstantForce Exception: {ex.Message}");
             }
@@ -583,7 +582,7 @@ namespace NOFFBController
 
         }
 
-        public void FFBDamper(FFBControlMessage msg)
+        public void FFBDamper(int damperX, int damperY)
         {
             if (_joystick == null) return;
             Condition[] conditions;
@@ -593,14 +592,13 @@ namespace NOFFBController
            switch (ffbAxes.Count)
            {
                 case 1:
-                    Console.WriteLine("FFBDamper: Setting Single axis Damper");
                     conditions = new Condition[1];
                     // X-Axis Damper
                     conditions[0] = new Condition
                     {
                         Offset = 0,                      // Center point offset (-10000 to 10000)
-                        PositiveCoefficient = msg.Values[0],     // Resistance moving positive (-10000 to 10000)
-                        NegativeCoefficient = msg.Values[0],     // Resistance moving negative (-10000 to 10000)
+                        PositiveCoefficient = damperX,     // Resistance moving positive (-10000 to 10000)
+                        NegativeCoefficient = damperX,     // Resistance moving negative (-10000 to 10000)
                         PositiveSaturation = 10000,      // Max force positive (0 to 10000)
                         NegativeSaturation = 10000,      // Max force negative (0 to 10000)
                         DeadBand = 0                     // Dead zone around center (0 to 10000)
@@ -626,23 +624,19 @@ namespace NOFFBController
                         ffbDamperEffect.Start();
                     } else
                     {
-                        ffbDamperEffect.Stop();
-                        ffbDamperEffect.Dispose();
-                        ffbDamperEffect = new Effect(_joystick, EffectGuid.Damper, effectParams);
-                        ffbDamperEffect.Start();
+                        ffbDamperEffect.SetParameters(effectParams, EffectParameterFlags.TypeSpecificParameters);
                     }
 
 
                         break;
                 case 2:
-                    Console.WriteLine("FFBDamper: Setting Dual axis Damper");
                     conditions = new Condition[2];
                     // X-Axis Damper
                     conditions[0] = new Condition
                     {
                         Offset = 0,                      // Center point offset (-10000 to 10000)
-                        PositiveCoefficient = msg.Values[0],     // Resistance moving positive (-10000 to 10000)
-                        NegativeCoefficient = msg.Values[0],     // Resistance moving negative (-10000 to 10000)
+                        PositiveCoefficient = damperX,     // Resistance moving positive (-10000 to 10000)
+                        NegativeCoefficient = damperX,     // Resistance moving negative (-10000 to 10000)
                         PositiveSaturation = 10000,      // Max force positive (0 to 10000)
                         NegativeSaturation = 10000,      // Max force negative (0 to 10000)
                         DeadBand = 0                     // Dead zone around center (0 to 10000)
@@ -651,8 +645,8 @@ namespace NOFFBController
                     conditions[1] = new Condition
                     {
                         Offset = 0,                      // Center point offset (-10000 to 10000)
-                        PositiveCoefficient = msg.Values[0],     // Resistance moving positive (-10000 to 10000)
-                        NegativeCoefficient = msg.Values[0],     // Resistance moving negative (-10000 to 10000)
+                        PositiveCoefficient = damperY,     // Resistance moving positive (-10000 to 10000)
+                        NegativeCoefficient = damperY,     // Resistance moving negative (-10000 to 10000)
                         PositiveSaturation = 10000,      // Max force positive (0 to 10000)
                         NegativeSaturation = 10000,      // Max force negative (0 to 10000)
                         DeadBand = 0                     // Dead zone around center (0 to 10000)
@@ -686,7 +680,105 @@ namespace NOFFBController
                     break;
            }        
         }
+        public void FFBFriction(int frictionX, int frictionY)
+        {
+            if (_joystick == null) return;
+            Condition[] conditions;
+            ConditionSet conditionSet;
+            EffectParameters effectParams;
 
+            switch (ffbAxes.Count)
+            {
+                case 1:
+                    conditions = new Condition[1];
+                    // X-Axis Damper
+                    conditions[0] = new Condition
+                    {
+                        Offset = 0,                      // Center point offset (-10000 to 10000)
+                        PositiveCoefficient = frictionX,     // Resistance moving positive (-10000 to 10000)
+                        NegativeCoefficient = frictionX,     // Resistance moving negative (-10000 to 10000)
+                        PositiveSaturation = 10000,      // Max force positive (0 to 10000)
+                        NegativeSaturation = 10000,      // Max force negative (0 to 10000)
+                        DeadBand = 0                     // Dead zone around center (0 to 10000)
+                    };
+                    conditionSet = new ConditionSet();
+                    conditionSet.Conditions = conditions;
+                    // Create effect parameters
+                    effectParams = new EffectParameters
+                    {
+                        Duration = int.MaxValue,         // Infinite duration
+                        Gain = 10000,                    // Overall strength (0-10000)
+                        TriggerButton = -1,              // No button trigger
+                        TriggerRepeatInterval = 0,
+                        SamplePeriod = 0,                // Use default
+                        Flags = EffectFlags.Polar | EffectFlags.ObjectIds,
+                        Parameters = conditionSet
+
+                    };
+                    effectParams.SetAxes(new int[] { ffbAxes[0], ffbAxes[1] }, new int[] { 0, 0 });
+                    if (null == ffbFrictionEffect)
+                    {
+                        ffbFrictionEffect = new Effect(_joystick, EffectGuid.Friction, effectParams);
+                        ffbFrictionEffect.Start();
+                    }
+                    else
+                    {
+                        ffbFrictionEffect.SetParameters(effectParams, EffectParameterFlags.TypeSpecificParameters);
+                    }
+
+
+                    break;
+                case 2:
+                    conditions = new Condition[2];
+                    // X-Axis Damper
+                    conditions[0] = new Condition
+                    {
+                        Offset = 0,                      // Center point offset (-10000 to 10000)
+                        PositiveCoefficient = frictionX,     // Resistance moving positive (-10000 to 10000)
+                        NegativeCoefficient = frictionX,     // Resistance moving negative (-10000 to 10000)
+                        PositiveSaturation = 10000,      // Max force positive (0 to 10000)
+                        NegativeSaturation = 10000,      // Max force negative (0 to 10000)
+                        DeadBand = 0                     // Dead zone around center (0 to 10000)
+                    };
+                    // Y-Axis Damper
+                    conditions[1] = new Condition
+                    {
+                        Offset = 0,                      // Center point offset (-10000 to 10000)
+                        PositiveCoefficient = frictionY,     // Resistance moving positive (-10000 to 10000)
+                        NegativeCoefficient = frictionY,     // Resistance moving negative (-10000 to 10000)
+                        PositiveSaturation = 10000,      // Max force positive (0 to 10000)
+                        NegativeSaturation = 10000,      // Max force negative (0 to 10000)
+                        DeadBand = 0                     // Dead zone around center (0 to 10000)
+                    };
+                    conditionSet = new ConditionSet();
+                    conditionSet.Conditions = conditions;
+                    // Create effect parameters
+                    effectParams = new EffectParameters
+                    {
+                        Duration = int.MaxValue,         // Infinite duration
+                        Gain = 10000,                    // Overall strength (0-10000)
+                        TriggerButton = -1,              // No button trigger
+                        TriggerRepeatInterval = 0,
+                        SamplePeriod = 0,                // Use default
+                        Flags = EffectFlags.Polar | EffectFlags.ObjectIds,
+                        Parameters = conditionSet
+
+                    };
+                    effectParams.SetAxes(new int[] { ffbAxes[0], ffbAxes[1] }, new int[] { 0, 0 });
+                    if (null == ffbFrictionEffect)
+                    {
+                        ffbFrictionEffect = new Effect(_joystick, EffectGuid.Damper, effectParams);
+                        ffbFrictionEffect.Start();
+                    }
+                    else
+                    {
+                        ffbFrictionEffect.SetParameters(effectParams, EffectParameterFlags.TypeSpecificParameters);
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
         public void FFBAutoCenter(FFBControlMessage msg)
         {
             try

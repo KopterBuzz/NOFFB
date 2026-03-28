@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading.Tasks;
 using BepInEx;
 using BepInEx.Bootstrap;
@@ -8,7 +9,6 @@ using BepInEx.Logging;
 using NuclearOption.Networking;
 using SharpDX.DirectInput;
 using UnityEngine;
-using static System.Collections.Specialized.BitVector32;
 
 namespace NOFFB
 {
@@ -16,7 +16,7 @@ namespace NOFFB
     {
         public const string PLUGIN_GUID = "NOFFB";
         public const string PLUGIN_NAME = "NOFFB";
-        public const string PLUGIN_VERSION = "0.2";
+        public const string PLUGIN_VERSION = "0.4";
     }
     [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
     [BepInProcess("NuclearOption.exe")]
@@ -53,18 +53,19 @@ namespace NOFFB
         Player player;
         PilotPlayerState playerState;
         Aircraft aircraft;
-        bool pollAircraft;
-        Vector3 aircraftAccel;
+        bool NOFFBControllerActive;
+        UnityEngine.Vector3 aircraftAccel;
 
         WeaponStation station;
         string weaponNamePrev = string.Empty;
         int ammoCountPrev = 0;
 
+        GameObject WheelFFBObject;
+        WheelFFB controller;
 
         UDPClient udp;
 
-
-        private Dictionary<string, float> barValues = new Dictionary<string, float>
+        public static  Dictionary<string, float> barValues = new Dictionary<string, float>
         {
             { "RawPitch", 0.0f },
             { "RawRoll", 0.0f },
@@ -78,11 +79,13 @@ namespace NOFFB
             { "ForceNormMag", 0.0f },
             { "ForceNormMagPrev", 0.0f },
             { "ForceAngle", 0.0f },
-            { "pitchDiffBuffer", 0.0f},
-            { "rollDiffBuffer", 0.0f},
+            { "pitchDiffBuffer", 0.0f },
+            { "rollDiffBuffer", 0.0f },
             { "tRoll", 0.0f },
-            { "tPitch", 0.0f }
-
+            { "tPitch", 0.0f },
+            { "throttle", 0.0f },
+            { "brake", 0.0f },
+            { "speed", 0.0f }
         };
 
 
@@ -98,7 +101,12 @@ namespace NOFFB
 
         void Awake()
         {
-            udp = new UDPClient();
+            Configuration.InitSettings(Config);
+            barValues["tPitch"] = Configuration.FFB_FBWPushBack_Factor.Value;
+            barValues["tRoll"] = Configuration.FFB_FBWPushBack_Factor.Value;
+
+            udp = new UDPClient(5001);
+
             GameObject managerObject = Chainloader.ManagerObject;
             bool flag = managerObject != null;
             if (flag)
@@ -113,10 +121,6 @@ namespace NOFFB
             Logger = base.Logger;
             Logger.LogDebug("AWAKE!");
             // Setup config
-            Configuration.InitSettings(Config);
-            barValues["tPitch"] = Configuration.FFB_FBWPushBack_Factor.Value;
-            barValues["tRoll"] = Configuration.FFB_FBWPushBack_Factor.Value;
-
         }
 
         void Update()
@@ -147,14 +151,70 @@ namespace NOFFB
                 GameManager.GetLocalAircraft(out aircraft);
                 if (null != aircraft)
                 {
-                    pollAircraft = true;
-                    PollAircraft(aircraft);
+                    switch (Configuration.FFB_Type.Value)
+                    {
+                        case Configuration.FFBTypes.NOFFBController:
+                            NOFFBControllerActive = true;
+                            PollAircraft(aircraft);
+                            break;
+                        case Configuration.FFBTypes.DCSTelemetry:
+                            break;
+                        case Configuration.FFBTypes.Other:
+                            if (null == WheelFFBObject)
+                            {
+                                WheelFFBObject = new GameObject();
+                                WheelFFBObject.AddComponent<WheelFFB>();
+                                controller = WheelFFBObject.GetComponent<WheelFFB>();
+                                controller.Initialize(aircraft);
+                                controller.enabled = true;
 
-
-
+                            }
+                            PollAircraft(aircraft);
+                            break;
+                        default:
+                            break;
+                    }
                 } else
                 {
-                    pollAircraft = false;
+                    NOFFBControllerActive = false;
+                    Destroy(WheelFFBObject);
+                }
+            }
+        }
+        void FixedUpdate()
+        {
+            if (null != aircraft)
+            {
+                switch (Configuration.FFB_Type.Value)
+                {
+                    case Configuration.FFBTypes.NOFFBController:
+                        station = aircraft.weaponManager.currentWeaponStation;
+                        if (weaponNamePrev != station.WeaponInfo.weaponName)
+                        {
+                            weaponNamePrev = station.WeaponInfo.weaponName;
+
+                            ammoCountPrev = station.Ammo;
+                        }
+                        bool recoil = false;
+                        if (NOFFBControllerActive)
+                        {
+                            if (station.WeaponInfo.gun && station.Ammo < ammoCountPrev)
+                            {
+                                recoil = true;
+                                ammoCountPrev = station.Ammo;
+                            }
+
+                            int[] data = CalucateAircraftFFB(recoil);
+                            SendFFB(data);
+                            //CalculateStickWeightForce();
+                        }
+                        break;
+                    case Configuration.FFBTypes.DCSTelemetry:
+                        break;
+                    case Configuration.FFBTypes.Other:
+                        break;
+                    default:
+                        break;
                 }
             }
         }
@@ -165,6 +225,7 @@ namespace NOFFB
 
             if (aircraft.pilots[0].currentState.GetType() == typeof(PilotPlayerState))
             {
+                UnityEngine.Vector3 vector = aircraft.cockpit.transform.InverseTransformDirection(aircraft.cockpit.rb.velocity);
                 playerState = (PilotPlayerState)aircraft.pilots[0].currentState;
                 ControlInputs input = aircraft.GetInputs();
                 barValues["RawPitch"] = playerState.pitchInput;
@@ -173,8 +234,10 @@ namespace NOFFB
                 barValues["FBWPitch"] = input.pitch;
                 barValues["FBWRoll"] = input.roll;
                 barValues["FBWYaw"] = input.yaw;
-
-
+                barValues["throttle"] = input.throttle;
+                barValues["brake"] = input.brake;
+                barValues["speed"] = aircraft.speed;
+                barValues["aos"] = Mathf.Atan2(vector.x, vector.z) * -57.29578f;
             }
         }
 
@@ -304,7 +367,7 @@ namespace NOFFB
         }
         int CalculateFFB_Stall(int inputForce)
         {
-            Vector3 vector = aircraft.cockpit.transform.InverseTransformDirection(aircraft.cockpit.rb.velocity);
+            UnityEngine.Vector3 vector = aircraft.cockpit.transform.InverseTransformDirection(aircraft.cockpit.rb.velocity);
             float aoaRatio = Mathf.Clamp(Mathf.Abs(Mathf.Atan2(vector.y, vector.z) * -57.29578f), 0f, 60f) / 60f;
             if (aoaRatio > 0.5f)
             {
@@ -326,33 +389,6 @@ namespace NOFFB
             return force;
         }
 
-        void FixedUpdate()
-        {
-            if (null != aircraft)
-            {
-                station = aircraft.weaponManager.currentWeaponStation;
-                if (weaponNamePrev != station.WeaponInfo.weaponName)
-                {
-                    weaponNamePrev = station.WeaponInfo.weaponName;
-
-                    ammoCountPrev = station.Ammo;
-                }
-                bool recoil = false;
-                if (null != aircraft && pollAircraft)
-                {
-                    if (station.WeaponInfo.gun && station.Ammo < ammoCountPrev)
-                    {
-                        recoil = true;
-                        ammoCountPrev = station.Ammo;
-                    }
-
-                    int[] data = CalucateAircraftFFB(recoil);
-                    SendFFB(data);
-                    //CalculateStickWeightForce();
-                }
-            }
-        }
-
         void SendFFB(int[] data)
         {
             int axis = 2;
@@ -361,7 +397,7 @@ namespace NOFFB
                 axis = 3;
             }
             string msg = $"constantforce,{axis},{data[0]},{data[1]},{data[2]}";
-            Plugin.Logger.LogDebug($"SENDER SIDE: {msg}");
+            //Plugin.Logger.LogDebug($"SENDER SIDE: {msg}");
             udp.SendData(msg);
         }
 
